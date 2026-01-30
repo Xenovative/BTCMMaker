@@ -314,46 +314,50 @@ export class Trader {
       this.updatePosition(tokenId, outcome, size, price);
       this.recordTrade(tokenId, outcome, 'BUY', price, size);
 
-      // 2. 等待買單成交
-      await this.sleep(2000);
-
-      // 3. 查詢實際持倉數量並確保有 allowance
-      let actualSize = size;
-      try {
-        const balances = await this.clobClient.getBalanceAllowance({ asset_type: 'CONDITIONAL' as any, token_id: tokenId });
-        if (balances) {
-          const rawBalance = parseFloat(balances.balance || '0') / 1e6;
-          const rawAllowance = parseFloat(balances.allowance || '0') / 1e6;
-          console.log(`📊 持倉查詢: balance=${rawBalance.toFixed(4)}, allowance=${rawAllowance.toFixed(4)}`);
+      // 2. 等待買單成交並輪詢確認
+      console.log(`⏳ 等待買單成交...`);
+      let actualSize = 0;
+      let attempts = 0;
+      const maxAttempts = 10; // 最多等 10 秒
+      
+      while (attempts < maxAttempts) {
+        await this.sleep(1000);
+        attempts++;
+        
+        try {
+          const balances = await this.clobClient.getBalanceAllowance({ asset_type: 'CONDITIONAL' as any, token_id: tokenId });
+          const rawBalance = parseFloat(balances?.balance || '0') / 1e6;
+          console.log(`📊 [${attempts}/${maxAttempts}] balance=${rawBalance.toFixed(2)}`);
           
-          // 如果 allowance=0，需要先 approve
-          if (rawAllowance < 0.1 && rawBalance > 0.1) {
-            console.log(`🔓 Approving token for selling...`);
-            await this.clobClient.updateBalanceAllowance({ 
-              asset_type: 'CONDITIONAL' as any, 
-              token_id: tokenId 
-            });
-            await this.sleep(1000);
-            
-            // 重新查詢 allowance
-            const newBalances = await this.clobClient.getBalanceAllowance({ asset_type: 'CONDITIONAL' as any, token_id: tokenId });
-            const newAllowance = parseFloat(newBalances?.allowance || '0') / 1e6;
-            actualSize = parseFloat(newAllowance.toFixed(1));
-            console.log(`📊 Approve 後 allowance: ${actualSize}`);
-          } else {
-            actualSize = parseFloat(rawAllowance.toFixed(1));
+          if (rawBalance >= size * 0.9) { // 至少 90% 成交
+            // 確保有 allowance
+            const rawAllowance = parseFloat(balances?.allowance || '0') / 1e6;
+            if (rawAllowance < rawBalance * 0.9) {
+              console.log(`🔓 Approving token for selling...`);
+              await this.clobClient.updateBalanceAllowance({ 
+                asset_type: 'CONDITIONAL' as any, 
+                token_id: tokenId 
+              });
+              await this.sleep(500);
+              const newBalances = await this.clobClient.getBalanceAllowance({ asset_type: 'CONDITIONAL' as any, token_id: tokenId });
+              actualSize = parseFloat((parseFloat(newBalances?.allowance || '0') / 1e6).toFixed(1));
+            } else {
+              actualSize = parseFloat(rawAllowance.toFixed(1));
+            }
+            console.log(`✅ 買單成交確認: ${actualSize} 股`);
+            break;
           }
+        } catch (e: any) {
+          console.log(`⚠️ 查詢失敗: ${e?.message}`);
         }
-      } catch (balanceError: any) {
-        console.log(`⚠️ 無法查詢持倉，使用買入數量: ${size}`, balanceError?.message);
       }
 
       if (actualSize <= 0) {
-        console.log(`⚠️ allowance 為 0，跳過 Limit Sell`);
+        console.log(`⚠️ 買單未成交或 allowance 為 0，Limit Sell 將由下一個 tick 補掛`);
         return true;
       }
 
-      // 4. 掛 Limit Sell 訂單（使用 allowance 數量）
+      // 3. 掛 Limit Sell 訂單
       try {
         const sellResponse = await this.clobClient.createAndPostOrder({
           tokenID: tokenId,
@@ -365,20 +369,8 @@ export class Trader {
         this.pendingSellOrders.set(tokenId, sellResponse.orderID || '');
       } catch (sellError: any) {
         console.error('Failed to place limit sell order:', sellError?.message || sellError);
-        // 重試一次
-        await this.sleep(1000);
-        try {
-          const retryResponse = await this.clobClient!.createAndPostOrder({
-            tokenID: tokenId,
-            price: targetSellPriceDecimal,
-            size: actualSize,
-            side: Side.SELL,
-          });
-          console.log(`📌 LIMIT SELL order placed (retry): ${retryResponse.orderID} x ${actualSize}`);
-          this.pendingSellOrders.set(tokenId, retryResponse.orderID || '');
-        } catch (retryError: any) {
-          console.error('Retry failed:', retryError?.message || retryError);
-        }
+        // Limit Sell 失敗，清除 pending 標記讓下一個 tick 重試
+        this.pendingSellOrders.delete(tokenId);
       }
 
       return true;
