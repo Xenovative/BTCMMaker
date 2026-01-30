@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import { MarketFetcher } from '../market-fetcher.js';
@@ -7,9 +9,16 @@ import { Trader } from '../trader.js';
 import { Strategy } from '../strategy.js';
 import { config } from '../config.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Serve static frontend files in production
+const frontendPath = path.join(__dirname, '../frontend');
+app.use(express.static(frontendPath));
 
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
@@ -349,6 +358,11 @@ app.post('/api/config', (req, res) => {
   }
   console.log('[Config] Updated via API:', { paperTrade: config.PAPER_TRADING });
   res.json({ success: true, paperTrade: config.PAPER_TRADING });
+});
+
+// SPA fallback - serve index.html for all non-API routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
 // Start server
