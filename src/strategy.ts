@@ -112,8 +112,28 @@ export class Strategy {
       return signals;
     }
 
-    // 情況 2: 獲利賣出已由 Limit Sell 訂單處理，不需要主動賣出
-    // Limit Sell 會在買入時立即掛單，價格 = 買入價 + PROFIT_TARGET
+    // 情況 2: 獲利賣出 - 當價格達到目標時主動賣出
+    for (const [tokenId, position] of positions) {
+      if (position.size > 0) {
+        const profit = position.currentPrice - position.avgBuyPrice;
+        if (profit >= config.PROFIT_TARGET) {
+          console.log(`[策略] 達到獲利目標: ${position.outcome} profit=${profit.toFixed(2)}¢ >= target=${config.PROFIT_TARGET}¢`);
+          signals.push({
+            action: 'SELL',
+            tokenId,
+            outcome: position.outcome,
+            price: position.currentPrice,
+            size: position.size,
+            reason: `獲利賣出 @ ${position.currentPrice.toFixed(1)}¢ (profit: ${profit.toFixed(2)}¢)`,
+          });
+        }
+      }
+    }
+    
+    // 如果有獲利賣出信號，先處理賣出
+    if (signals.length > 0) {
+      return signals;
+    }
 
     // 情況 3: 盤前買入機會 (檢查時間窗口)
     const timeCheck = riskManager.checkTimeWindow(state.timeToStart);
