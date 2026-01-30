@@ -317,26 +317,43 @@ export class Trader {
       // 2. 等待買單成交
       await this.sleep(2000);
 
-      // 3. 查詢實際持倉數量
+      // 3. 查詢實際持倉數量並確保有 allowance
       let actualSize = size;
       try {
         const balances = await this.clobClient.getBalanceAllowance({ asset_type: 'CONDITIONAL' as any, token_id: tokenId });
-        if (balances && balances.balance) {
-          // balance 是 6 位小數的字符串，保留 1 位小數賣出全部
-          const rawBalance = parseFloat(balances.balance) / 1e6;
-          actualSize = parseFloat(rawBalance.toFixed(1));
-          console.log(`📊 實際持倉: ${actualSize} 股 (raw: ${rawBalance})`);
+        if (balances) {
+          const rawBalance = parseFloat(balances.balance || '0') / 1e6;
+          const rawAllowance = parseFloat(balances.allowance || '0') / 1e6;
+          console.log(`📊 持倉查詢: balance=${rawBalance.toFixed(4)}, allowance=${rawAllowance.toFixed(4)}`);
+          
+          // 如果 allowance=0，需要先 approve
+          if (rawAllowance < 0.1 && rawBalance > 0.1) {
+            console.log(`🔓 Approving token for selling...`);
+            await this.clobClient.updateBalanceAllowance({ 
+              asset_type: 'CONDITIONAL' as any, 
+              token_id: tokenId 
+            });
+            await this.sleep(1000);
+            
+            // 重新查詢 allowance
+            const newBalances = await this.clobClient.getBalanceAllowance({ asset_type: 'CONDITIONAL' as any, token_id: tokenId });
+            const newAllowance = parseFloat(newBalances?.allowance || '0') / 1e6;
+            actualSize = parseFloat(newAllowance.toFixed(1));
+            console.log(`📊 Approve 後 allowance: ${actualSize}`);
+          } else {
+            actualSize = parseFloat(rawAllowance.toFixed(1));
+          }
         }
       } catch (balanceError: any) {
-        console.log(`⚠️ 無法查詢持倉，使用買入數量: ${size}`);
+        console.log(`⚠️ 無法查詢持倉，使用買入數量: ${size}`, balanceError?.message);
       }
 
       if (actualSize <= 0) {
-        console.log(`⚠️ 持倉為 0，跳過 Limit Sell`);
+        console.log(`⚠️ allowance 為 0，跳過 Limit Sell`);
         return true;
       }
 
-      // 4. 掛 Limit Sell 訂單（使用實際持倉數量）
+      // 4. 掛 Limit Sell 訂單（使用 allowance 數量）
       try {
         const sellResponse = await this.clobClient.createAndPostOrder({
           tokenID: tokenId,
