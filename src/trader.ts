@@ -172,36 +172,53 @@ export class Trader {
       }
 
       const rawBalance = parseFloat(balances.balance || '0') / 1e6;
-      const rawAllowance = parseFloat(balances.allowance || '0') / 1e6;
+      let rawAllowance = parseFloat(balances.allowance || '0') / 1e6;
       
       console.log(`[Limit Sell] balance=${rawBalance.toFixed(4)}, allowance=${rawAllowance.toFixed(4)}`);
       
-      // 如果 allowance=0 但 balance>0，先 approve 再下單
-      let actualSize: number;
-      if (rawAllowance > 0.1) {
-        actualSize = parseFloat(rawAllowance.toFixed(1));
-      } else if (rawBalance > 0.1) {
-        // 需要先 approve token
-        console.log(`[Limit Sell] allowance=0，嘗試 approve token...`);
+      // 如果 allowance=0 但 balance>0，可能是有未成交訂單佔用了 allowance
+      // 先取消所有訂單釋放 allowance
+      if (rawAllowance < 0.1 && rawBalance > 0.1) {
+        console.log(`[Limit Sell] allowance=0，取消現有訂單釋放額度...`);
+        try {
+          await this.clobClient.cancelAll();
+          await this.sleep(1000);
+          
+          // 重新查詢
+          const newBalances = await this.clobClient.getBalanceAllowance({ asset_type: 'CONDITIONAL' as any, token_id: tokenId });
+          rawAllowance = parseFloat(newBalances?.allowance || '0') / 1e6;
+          console.log(`[Limit Sell] 取消訂單後 allowance=${rawAllowance.toFixed(4)}`);
+        } catch (e: any) {
+          console.log(`[Limit Sell] 取消訂單失敗: ${e?.message}`);
+        }
+      }
+      
+      // 如果還是 0，嘗試 approve
+      if (rawAllowance < 0.1 && rawBalance > 0.1) {
+        console.log(`[Limit Sell] 嘗試 approve token...`);
         try {
           await this.clobClient.updateBalanceAllowance({ 
             asset_type: 'CONDITIONAL' as any, 
             token_id: tokenId 
           });
-          console.log(`[Limit Sell] Token approved`);
-          // 重新查詢 allowance
+          await this.sleep(2000);
+          
           const newBalances = await this.clobClient.getBalanceAllowance({ asset_type: 'CONDITIONAL' as any, token_id: tokenId });
-          const newAllowance = parseFloat(newBalances?.allowance || '0') / 1e6;
-          if (newAllowance > 0.1) {
-            actualSize = parseFloat(newAllowance.toFixed(1));
-          } else {
-            console.log(`[Limit Sell] Approve 後 allowance 仍為 0`);
-            return false;
-          }
+          rawAllowance = parseFloat(newBalances?.allowance || '0') / 1e6;
+          console.log(`[Limit Sell] Approve 後 allowance=${rawAllowance.toFixed(4)}`);
         } catch (approveError: any) {
           console.error(`[Limit Sell] Approve 失敗:`, approveError?.message);
-          return false;
         }
+      }
+      
+      // 決定實際可賣數量
+      let actualSize: number;
+      if (rawAllowance > 0.1) {
+        actualSize = parseFloat(rawAllowance.toFixed(1));
+      } else if (rawBalance > 0.1) {
+        // 最後嘗試：直接用 balance 下單
+        console.log(`[Limit Sell] allowance 仍為 0，嘗試用 balance 直接下單`);
+        actualSize = parseFloat(rawBalance.toFixed(1));
       } else {
         console.log(`[Limit Sell] 無可賣股份`);
         return false;
