@@ -47,10 +47,14 @@ function broadcast(type: string, data: any) {
   });
 }
 
+// Helper to add delay between API calls
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 // Bot tick function
 async function tick() {
   try {
     const state = await fetcher.getMarketState();
+    await delay(500); // Rate limit protection
 
     if (!state) {
       console.log('[Tick] No market state');
@@ -72,8 +76,10 @@ async function tick() {
 
     // 從 API 同步持倉（只同步當前和下一個市場，避免 rate limit）
     await trader.syncPositionsFromApi(state.upTokenId, state.downTokenId, state.upPrice, state.downPrice);
+    await delay(300);
     if (state.currentUpTokenId && state.currentDownTokenId) {
       await trader.syncPositionsFromApi(state.currentUpTokenId, state.currentDownTokenId, state.currentUpPrice, state.currentDownPrice);
+      await delay(300);
     }
 
     // Update position prices
@@ -105,8 +111,10 @@ async function tick() {
       if (pos.size > 0 && !config.PAPER_TRADING) {
         // 先嘗試補掛 Limit Sell
         await trader.placeLimitSellForPosition(tokenId, pos.outcome, pos.avgBuyPrice);
+        await delay(300);
         // 清理剩餘小數股份（< 1 股）
         await trader.marketSellRemainder(tokenId, pos.outcome, pos.currentPrice);
+        await delay(300);
       }
     }
 
@@ -151,6 +159,7 @@ async function tick() {
         }
       }
 
+      await delay(500); // Rate limit between trades
       if (success) {
         // Broadcast trade
         broadcast('trade', {

@@ -15,7 +15,7 @@ export const config = {
   MAX_BUY_PRICE: Number(process.env.MAX_BUY_PRICE) || 50, // cents
   PROFIT_TARGET: Number(process.env.PROFIT_TARGET) || 2, // cents
   MAX_POSITION_SIZE: Number(process.env.MAX_POSITION_SIZE) || 100,
-  POLL_INTERVAL_MS: Number(process.env.POLL_INTERVAL_MS) || 1000,
+  POLL_INTERVAL_MS: Number(process.env.POLL_INTERVAL_MS) || 5000,
   PAPER_TRADING: process.env.PAPER_TRADING === 'true',
 
   // 滑點保護
