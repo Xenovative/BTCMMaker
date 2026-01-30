@@ -24,7 +24,7 @@ echo -e "${GREEN}========================================${NC}"
 # Configuration
 APP_NAME="btc-mm-bot"
 APP_DIR="/opt/$APP_NAME"
-REPO_URL="${REPO_URL:-git@github.com:yourusername/BTCMMaker.git}"
+SOURCE_DIR="${SOURCE_DIR:-$(dirname "$(readlink -f "$0")")}"
 NODE_VERSION="20"
 PM2_INSTANCES=1
 
@@ -40,7 +40,7 @@ fi
 echo -e "\n${YELLOW}[1/7] Installing system dependencies...${NC}"
 
 apt-get update
-apt-get install -y curl git build-essential
+apt-get install -y curl git build-essential rsync
 
 # =============================================================================
 # Step 2: Install Node.js
@@ -63,31 +63,19 @@ echo -e "\n${YELLOW}[3/7] Installing PM2...${NC}"
 npm install -g pm2
 
 # =============================================================================
-# Step 4: Clone or update repository
+# Step 4: Copy application files
 # =============================================================================
 echo -e "\n${YELLOW}[4/7] Setting up application...${NC}"
 
-if [ -d "$APP_DIR" ]; then
-    echo "Using existing installation at $APP_DIR..."
-    cd "$APP_DIR"
-    # Pull latest changes only if it's a git repo and user wants updates
-    if [ -d ".git" ] && [ "${SKIP_GIT_PULL:-false}" != "true" ]; then
-        echo "Pulling latest changes (set SKIP_GIT_PULL=true to skip)..."
-        git pull origin main || echo "Git pull failed, continuing with existing code..."
-    fi
+if [ "$SOURCE_DIR" != "$APP_DIR" ]; then
+    echo "Copying files from $SOURCE_DIR to $APP_DIR..."
+    mkdir -p "$APP_DIR"
+    rsync -av --exclude='node_modules' --exclude='.git' --exclude='dist' "$SOURCE_DIR/" "$APP_DIR/"
 else
-    # Check if we should copy from a local directory instead of cloning
-    if [ -n "$LOCAL_SOURCE" ] && [ -d "$LOCAL_SOURCE" ]; then
-        echo "Copying from local source: $LOCAL_SOURCE..."
-        mkdir -p "$APP_DIR"
-        cp -r "$LOCAL_SOURCE"/* "$APP_DIR"/
-        cd "$APP_DIR"
-    else
-        echo "Cloning repository..."
-        git clone "$REPO_URL" "$APP_DIR"
-        cd "$APP_DIR"
-    fi
+    echo "Running from target directory, skipping copy..."
 fi
+
+cd "$APP_DIR"
 
 # =============================================================================
 # Step 5: Install dependencies and build
