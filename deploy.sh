@@ -68,14 +68,25 @@ npm install -g pm2
 echo -e "\n${YELLOW}[4/7] Setting up application...${NC}"
 
 if [ -d "$APP_DIR" ]; then
-    echo "Updating existing installation..."
+    echo "Using existing installation at $APP_DIR..."
     cd "$APP_DIR"
-    git fetch origin
-    git reset --hard origin/main
+    # Pull latest changes only if it's a git repo and user wants updates
+    if [ -d ".git" ] && [ "${SKIP_GIT_PULL:-false}" != "true" ]; then
+        echo "Pulling latest changes (set SKIP_GIT_PULL=true to skip)..."
+        git pull origin main || echo "Git pull failed, continuing with existing code..."
+    fi
 else
-    echo "Cloning repository..."
-    git clone "$REPO_URL" "$APP_DIR"
-    cd "$APP_DIR"
+    # Check if we should copy from a local directory instead of cloning
+    if [ -n "$LOCAL_SOURCE" ] && [ -d "$LOCAL_SOURCE" ]; then
+        echo "Copying from local source: $LOCAL_SOURCE..."
+        mkdir -p "$APP_DIR"
+        cp -r "$LOCAL_SOURCE"/* "$APP_DIR"/
+        cd "$APP_DIR"
+    else
+        echo "Cloning repository..."
+        git clone "$REPO_URL" "$APP_DIR"
+        cd "$APP_DIR"
+    fi
 fi
 
 # =============================================================================
