@@ -23,8 +23,7 @@ echo -e "${GREEN}========================================${NC}"
 
 # Configuration
 APP_NAME="btc-mm-bot"
-APP_DIR="/opt/$APP_NAME"
-SOURCE_DIR="${SOURCE_DIR:-$(dirname "$(readlink -f "$0")")}"
+APP_DIR="$(dirname "$(readlink -f "$0")")"
 NODE_VERSION="20"
 PM2_INSTANCES=1
 
@@ -40,7 +39,7 @@ fi
 echo -e "\n${YELLOW}[1/7] Installing system dependencies...${NC}"
 
 apt-get update
-apt-get install -y curl git build-essential rsync
+apt-get install -y curl git build-essential
 
 # =============================================================================
 # Step 2: Install Node.js
@@ -63,19 +62,12 @@ echo -e "\n${YELLOW}[3/7] Installing PM2...${NC}"
 npm install -g pm2
 
 # =============================================================================
-# Step 4: Copy application files
+# Step 4: Setup application directory
 # =============================================================================
 echo -e "\n${YELLOW}[4/7] Setting up application...${NC}"
 
-if [ "$SOURCE_DIR" != "$APP_DIR" ]; then
-    echo "Copying files from $SOURCE_DIR to $APP_DIR..."
-    mkdir -p "$APP_DIR"
-    rsync -av --exclude='node_modules' --exclude='.git' --exclude='dist' "$SOURCE_DIR/" "$APP_DIR/"
-else
-    echo "Running from target directory, skipping copy..."
-fi
-
 cd "$APP_DIR"
+echo "Using application directory: $APP_DIR"
 
 # =============================================================================
 # Step 5: Install dependencies and build
