@@ -176,13 +176,41 @@ export class Trader {
       
       console.log(`[Limit Sell] balance=${rawBalance.toFixed(4)}, allowance=${rawAllowance.toFixed(4)}`);
       
-      // 如果 allowance=0 但 balance>0，說明有訂單佔用了 allowance
-      // 這是正常的 - 表示已經有 limit sell 掛單了，不需要重新下單
+      // 如果 allowance=0 但 balance>0，需要檢查是否真的有掛單
       if (rawAllowance < 0.1 && rawBalance > 0.1) {
-        console.log(`[Limit Sell] allowance=0 表示已有掛單佔用，跳過`);
-        // 標記為已有掛單（即使我們不知道 orderId）
-        this.pendingSellOrders.set(tokenId, 'existing');
-        return true;
+        // 查詢是否有該 token 的 open orders
+        try {
+          const openOrders = await this.clobClient.getOpenOrders({ asset_id: tokenId });
+          const sellOrders = openOrders?.filter((o: any) => o.side === 'SELL') || [];
+          
+          if (sellOrders.length > 0) {
+            console.log(`[Limit Sell] 已有 ${sellOrders.length} 個賣單掛單中`);
+            this.pendingSellOrders.set(tokenId, sellOrders[0].id || 'existing');
+            return true;
+          } else {
+            // 沒有掛單，需要 approve 然後下單
+            console.log(`[Limit Sell] 無掛單，嘗試 approve token...`);
+            await this.clobClient.updateBalanceAllowance({ 
+              asset_type: 'CONDITIONAL' as any, 
+              token_id: tokenId 
+            });
+            await this.sleep(2000);
+            
+            // 重新查詢 allowance
+            const newBalances = await this.clobClient.getBalanceAllowance({ asset_type: 'CONDITIONAL' as any, token_id: tokenId });
+            rawAllowance = parseFloat(newBalances?.allowance || '0') / 1e6;
+            console.log(`[Limit Sell] Approve 後 allowance=${rawAllowance.toFixed(4)}`);
+            
+            if (rawAllowance < 0.1) {
+              // 還是 0，直接用 balance 嘗試
+              console.log(`[Limit Sell] allowance 仍為 0，用 balance 嘗試下單`);
+              rawAllowance = rawBalance;
+            }
+          }
+        } catch (e: any) {
+          console.log(`[Limit Sell] 查詢掛單失敗: ${e?.message}，用 balance 嘗試`);
+          rawAllowance = rawBalance;
+        }
       }
       
       // 決定實際可賣數量
