@@ -78,6 +78,32 @@ export class Strategy {
     const signals: TradeSignal[] = [];
     const now = Date.now();
 
+    // 情況 0: 檢測並清倉已結束市場的持倉（orphaned positions）
+    const validTokenIds = new Set([
+      state.upTokenId,
+      state.downTokenId,
+      state.currentUpTokenId,
+      state.currentDownTokenId,
+    ].filter(id => id)); // 過濾空字串
+    
+    for (const [tokenId, position] of positions) {
+      if (position.size > 0 && !validTokenIds.has(tokenId)) {
+        console.log(`[策略] 發現已結束市場的持倉: ${position.outcome} ${position.size} 股，強制清倉`);
+        signals.push({
+          action: 'SELL',
+          tokenId,
+          outcome: position.outcome,
+          price: position.currentPrice,
+          size: position.size,
+          reason: `清倉已結束市場持倉`,
+        });
+      }
+    }
+    
+    if (signals.length > 0) {
+      return signals;
+    }
+
     // 情況 1a: 下一個市場開局前強制清倉
     if (state.nextMarket && state.timeToStart <= config.SELL_BEFORE_START_MS) {
       for (const [tokenId, position] of positions) {
@@ -143,60 +169,95 @@ export class Strategy {
       return signals;
     }
 
+    // 情況 4a: 盤前買入（下一個市場）
     if (state.nextMarket && state.timeToStart > config.MIN_TIME_TO_TRADE_MS) {
-      const trend = this.analyzeCurrentMarketTrend(state);
-
-      // 計算考慮手續費後的最小獲利價格變動
-      const minMove = riskManager.calculateMinPriceMove(
-        state.upPrice,
-        config.PROFIT_TARGET,
-        config.MAX_POSITION_SIZE
-      );
-      this.minProfitableMove = minMove;
-
-      console.log(`[策略] 買入條件檢查: trend=${trend}, minMove=${minMove.toFixed(2)}¢`);
-      console.log(`[策略] Up: price=${state.upPrice.toFixed(1)}¢, hasPosition=${positions.has(state.upTokenId)}`);
-      console.log(`[策略] Down: price=${state.downPrice.toFixed(1)}¢, hasPosition=${positions.has(state.downTokenId)}`);
-
-      // 檢查是否已有任何持倉 - 只買一次
-      const hasAnyPosition = positions.size > 0;
-      if (hasAnyPosition) {
-        console.log(`[策略] 已有持倉，不再買入`);
+      const signal = this.tryBuyMarket(state, positions, state.upTokenId, state.downTokenId, state.upPrice, state.downPrice, '盤前');
+      if (signal) {
+        signals.push(signal);
         return signals;
       }
-
-      // 檢查 Up
-      if (state.upPrice < config.MAX_BUY_PRICE) {
-        const upMomentum = this.calculateMomentum(state.upTokenId, state.upPrice);
-        signals.push({
-          action: 'BUY',
-          tokenId: state.upTokenId,
-          outcome: 'Up',
-          price: state.upPrice,
-          size: config.MAX_POSITION_SIZE,
-          reason: `盤前買入 Up @ ${state.upPrice.toFixed(1)}¢ (trend: ${trend || 'none'}, momentum: ${upMomentum.toFixed(2)})`,
-        });
-        // 只買一個方向，不同時買 Up 和 Down
+    }
+    
+    // 情況 4b: 盤中低吸（當前市場）- 市場進行中且距離結束還有足夠時間
+    if (state.currentMarket && state.timeToEnd > config.SELL_BEFORE_START_MS + 60000) { // 至少比清倉時間多 1 分鐘
+      const signal = this.tryBuyMarket(state, positions, state.currentUpTokenId, state.currentDownTokenId, state.currentUpPrice, state.currentDownPrice, '盤中低吸');
+      if (signal) {
+        signals.push(signal);
         return signals;
       }
-
-      // 如果 Up 價格太高，檢查 Down
-      if (state.downPrice < config.MAX_BUY_PRICE) {
-        const downMomentum = this.calculateMomentum(state.downTokenId, state.downPrice);
-        signals.push({
-          action: 'BUY',
-          tokenId: state.downTokenId,
-          outcome: 'Down',
-          price: state.downPrice,
-          size: config.MAX_POSITION_SIZE,
-          reason: `盤前買入 Down @ ${state.downPrice.toFixed(1)}¢ (trend: ${trend || 'none'}, momentum: ${downMomentum.toFixed(2)})`,
-        });
-      }
-    } else {
-      console.log(`[策略] 不買入: nextMarket=${!!state.nextMarket}, timeToStart=${state.timeToStart}ms, MIN=${config.MIN_TIME_TO_TRADE_MS}ms`);
     }
 
     return signals;
+  }
+
+  /**
+   * 嘗試在指定市場買入
+   */
+  private tryBuyMarket(
+    state: MarketState,
+    positions: Map<string, Position>,
+    upTokenId: string,
+    downTokenId: string,
+    upPrice: number,
+    downPrice: number,
+    label: string
+  ): TradeSignal | null {
+    if (!upTokenId || !downTokenId) return null;
+    
+    const trend = this.analyzeCurrentMarketTrend(state);
+
+    // 計算考慮手續費後的最小獲利價格變動
+    const minMove = riskManager.calculateMinPriceMove(
+      upPrice,
+      config.PROFIT_TARGET,
+      config.MAX_POSITION_SIZE
+    );
+    this.minProfitableMove = minMove;
+
+    console.log(`[策略] ${label}買入條件檢查: trend=${trend}, minMove=${minMove.toFixed(2)}¢`);
+    console.log(`[策略] Up: price=${upPrice.toFixed(1)}¢, hasPosition=${positions.has(upTokenId)}`);
+    console.log(`[策略] Down: price=${downPrice.toFixed(1)}¢, hasPosition=${positions.has(downTokenId)}`);
+
+    // 檢查是否已有該市場的持倉 - 只買一次
+    const hasPositionInThisMarket = positions.has(upTokenId) || positions.has(downTokenId);
+    if (hasPositionInThisMarket) {
+      console.log(`[策略] 已有該市場持倉，不再買入`);
+      return null;
+    }
+    
+    // 如果有其他市場的持倉（舊市場），也不買入（等待清倉）
+    if (positions.size > 0) {
+      console.log(`[策略] 有其他市場持倉待清倉，不買入`);
+      return null;
+    }
+
+    // 檢查 Up
+    if (upPrice < config.MAX_BUY_PRICE) {
+      const upMomentum = this.calculateMomentum(upTokenId, upPrice);
+      return {
+        action: 'BUY',
+        tokenId: upTokenId,
+        outcome: 'Up',
+        price: upPrice,
+        size: config.MAX_POSITION_SIZE,
+        reason: `${label}買入 Up @ ${upPrice.toFixed(1)}¢ (trend: ${trend || 'none'}, momentum: ${upMomentum.toFixed(2)})`,
+      };
+    }
+
+    // 如果 Up 價格太高，檢查 Down
+    if (downPrice < config.MAX_BUY_PRICE) {
+      const downMomentum = this.calculateMomentum(downTokenId, downPrice);
+      return {
+        action: 'BUY',
+        tokenId: downTokenId,
+        outcome: 'Down',
+        price: downPrice,
+        size: config.MAX_POSITION_SIZE,
+        reason: `${label}買入 Down @ ${downPrice.toFixed(1)}¢ (trend: ${trend || 'none'}, momentum: ${downMomentum.toFixed(2)})`,
+      };
+    }
+
+    return null;
   }
 
   /**
@@ -211,6 +272,10 @@ export class Strategy {
         position.currentPrice = state.upPrice;
       } else if (tokenId === state.downTokenId) {
         position.currentPrice = state.downPrice;
+      } else if (tokenId === state.currentUpTokenId) {
+        position.currentPrice = state.currentUpPrice;
+      } else if (tokenId === state.currentDownTokenId) {
+        position.currentPrice = state.currentDownPrice;
       }
     }
   }

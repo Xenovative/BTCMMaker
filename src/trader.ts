@@ -93,24 +93,28 @@ export class Trader {
       
       if (upBalance > 0.1) {
         if (!this.positions.has(upTokenId)) {
-          console.log(`[同步] 發現 Up 持倉: ${upBalance.toFixed(1)} 股 @ ${upPrice.toFixed(1)}¢`);
+          // 新發現的持倉（可能是 bot 重啟後）- 用當前價格作為估計
+          // 注意：這不是真正的買入價，只是估計值
+          console.log(`[同步] 發現 Up 持倉: ${upBalance.toFixed(1)} 股 (估計買入價: ${upPrice.toFixed(1)}¢)`);
           this.positions.set(upTokenId, {
             tokenId: upTokenId,
             outcome: 'Up',
             size: Math.floor(upBalance),
-            avgBuyPrice: upPrice,
+            avgBuyPrice: upPrice, // 估計值，實際買入時會被正確設置
             currentPrice: upPrice,
           });
         } else {
-          // 更新現有持倉的數量
+          // 已有持倉記錄 - 只更新數量和現價，保留原始 avgBuyPrice
           const pos = this.positions.get(upTokenId)!;
           pos.size = Math.floor(upBalance);
           pos.currentPrice = upPrice;
+          // 不更新 avgBuyPrice - 保留實際買入價格
         }
       } else {
         if (this.positions.has(upTokenId)) {
           console.log(`[同步] Up 持倉已清空`);
           this.positions.delete(upTokenId);
+          this.pendingSellOrders.delete(upTokenId);
         }
       }
 
@@ -120,7 +124,7 @@ export class Trader {
       
       if (downBalance > 0.1) {
         if (!this.positions.has(downTokenId)) {
-          console.log(`[同步] 發現 Down 持倉: ${downBalance.toFixed(1)} 股 @ ${downPrice.toFixed(1)}¢`);
+          console.log(`[同步] 發現 Down 持倉: ${downBalance.toFixed(1)} 股 (估計買入價: ${downPrice.toFixed(1)}¢)`);
           this.positions.set(downTokenId, {
             tokenId: downTokenId,
             outcome: 'Down',
@@ -129,14 +133,17 @@ export class Trader {
             currentPrice: downPrice,
           });
         } else {
+          // 已有持倉記錄 - 只更新數量和現價，保留原始 avgBuyPrice
           const pos = this.positions.get(downTokenId)!;
           pos.size = Math.floor(downBalance);
           pos.currentPrice = downPrice;
+          // 不更新 avgBuyPrice - 保留實際買入價格
         }
       } else {
         if (this.positions.has(downTokenId)) {
           console.log(`[同步] Down 持倉已清空`);
           this.positions.delete(downTokenId);
+          this.pendingSellOrders.delete(downTokenId);
         }
       }
     } catch (error: any) {
