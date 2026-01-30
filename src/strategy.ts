@@ -218,16 +218,10 @@ export class Strategy {
     console.log(`[策略] Up: price=${upPrice.toFixed(1)}¢, hasPosition=${positions.has(upTokenId)}`);
     console.log(`[策略] Down: price=${downPrice.toFixed(1)}¢, hasPosition=${positions.has(downTokenId)}`);
 
-    // 檢查是否已有該市場的持倉 - 只買一次
+    // 檢查是否已有該市場的持倉 - 每個市場只買一次
     const hasPositionInThisMarket = positions.has(upTokenId) || positions.has(downTokenId);
     if (hasPositionInThisMarket) {
       console.log(`[策略] 已有該市場持倉，不再買入`);
-      return null;
-    }
-    
-    // 如果有其他市場的持倉（舊市場），也不買入（等待清倉）
-    if (positions.size > 0) {
-      console.log(`[策略] 有其他市場持倉待清倉，不買入`);
       return null;
     }
 
