@@ -201,7 +201,7 @@ export class Strategy {
     }
     
     // 情況 4b: 盤中低吸（當前市場）- 市場進行中且距離結束還有足夠時間
-    if (state.currentMarket && state.timeToEnd > config.SELL_BEFORE_START_MS + 60000) { // 至少比清倉時間多 1 分鐘
+    if (config.ALLOW_CURRENT_MARKET_TRADING && state.currentMarket && state.timeToEnd > config.SELL_BEFORE_START_MS + 60000) { // 至少比清倉時間多 1 分鐘
       const signal = this.tryBuyMarket(state, positions, state.currentUpTokenId, state.currentDownTokenId, state.currentUpPrice, state.currentDownPrice, '盤中低吸');
       if (signal) {
         signals.push(signal);

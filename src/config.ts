@@ -16,6 +16,7 @@ export const config = {
   PROFIT_TARGET: Number(process.env.PROFIT_TARGET) || 2, // cents
   STOP_LOSS: Number(process.env.STOP_LOSS) || 5, // cents - 止損點（虧損超過此值時賣出）
   MAX_POSITION_SIZE: Number(process.env.MAX_POSITION_SIZE) || 100,
+  ALLOW_CURRENT_MARKET_TRADING: process.env.ALLOW_CURRENT_MARKET_TRADING !== 'false', // 是否允許盤中交易（默認開啟）
   POLL_INTERVAL_MS: Number(process.env.POLL_INTERVAL_MS) || 5000,
   PAPER_TRADING: process.env.PAPER_TRADING === 'true',
 

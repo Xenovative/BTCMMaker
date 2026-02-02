@@ -272,7 +272,9 @@ wss.on('connection', (ws) => {
         paperTrade: config.PAPER_TRADING,
         maxBuyPrice: config.MAX_BUY_PRICE,
         profitTarget: config.PROFIT_TARGET,
+        stopLoss: config.STOP_LOSS,
         maxPositionSize: config.MAX_POSITION_SIZE,
+        allowCurrentMarketTrading: config.ALLOW_CURRENT_MARKET_TRADING,
         privateKey: '',
         funderAddress: config.FUNDER_ADDRESS,
       },
@@ -311,6 +313,12 @@ wss.on('connection', (ws) => {
           }
           if (payload.maxPositionSize) {
             (config as any).MAX_POSITION_SIZE = payload.maxPositionSize;
+          }
+          if (payload.stopLoss) {
+            (config as any).STOP_LOSS = payload.stopLoss;
+          }
+          if (payload.allowCurrentMarketTrading !== undefined) {
+            (config as any).ALLOW_CURRENT_MARKET_TRADING = payload.allowCurrentMarketTrading;
           }
 
           broadcast('status', {

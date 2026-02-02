@@ -4,7 +4,9 @@ export interface BotConfig {
   paperTrade: boolean;
   maxBuyPrice: number;
   profitTarget: number;
+  stopLoss: number;
   maxPositionSize: number;
+  allowCurrentMarketTrading: boolean;
   privateKey: string;
   funderAddress: string;
 }
@@ -68,7 +70,9 @@ export const useBotStore = create<BotStore>((set, get) => ({
     paperTrade: true,
     maxBuyPrice: 50,
     profitTarget: 2,
+    stopLoss: 5,
     maxPositionSize: 100,
+    allowCurrentMarketTrading: true,
     privateKey: '',
     funderAddress: '',
   },

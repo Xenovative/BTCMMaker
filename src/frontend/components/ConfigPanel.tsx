@@ -128,6 +128,21 @@ export function ConfigPanel() {
           </div>
 
           <div>
+            <label className="block text-sm text-gray-400 mb-2">止損點 (¢)</label>
+            <input
+              type="number"
+              step="1"
+              min="1"
+              max="20"
+              value={localConfig.stopLoss}
+              onChange={(e) => handleChange('stopLoss', parseFloat(e.target.value) || 5)}
+              className="w-full bg-gray-800 border border-red-500/30 rounded-lg px-4 py-3 text-white font-mono focus:outline-none focus:border-red-500 transition-colors"
+              disabled={status.running}
+            />
+            <p className="text-xs text-gray-600 mt-1">虧損超過此值時自動賣出</p>
+          </div>
+
+          <div>
             <label className="block text-sm text-gray-400 mb-2 flex items-center gap-1">
               <Hash className="w-4 h-4" />
               每筆交易股數
@@ -143,6 +158,32 @@ export function ConfigPanel() {
             />
             <p className="text-xs text-gray-600 mt-1">每次買入的股數</p>
           </div>
+        </div>
+
+        {/* Current Market Trading Toggle */}
+        <div className="mt-6 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+          <label className="flex items-center justify-between cursor-pointer">
+            <div>
+              <span className="text-white font-medium">允許盤中交易</span>
+              <p className="text-xs text-gray-500 mt-1">開啟後可在當前市場進行低吸買入</p>
+            </div>
+            <div className="relative">
+              <input
+                type="checkbox"
+                checked={localConfig.allowCurrentMarketTrading}
+                onChange={(e) => handleChange('allowCurrentMarketTrading', e.target.checked)}
+                className="sr-only"
+                disabled={status.running}
+              />
+              <div className={`w-14 h-7 rounded-full transition-colors ${
+                localConfig.allowCurrentMarketTrading ? 'bg-green-600' : 'bg-gray-600'
+              }`}>
+                <div className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full transition-transform ${
+                  localConfig.allowCurrentMarketTrading ? 'translate-x-7' : 'translate-x-0'
+                }`} />
+              </div>
+            </div>
+          </label>
         </div>
 
         {/* Cost Preview */}
