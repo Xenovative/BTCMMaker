@@ -138,7 +138,29 @@ export class Strategy {
       return signals;
     }
 
-    // 情況 2: 獲利賣出 - 當價格達到目標時主動賣出
+    // 情況 2a: 止損賣出 - 當虧損超過止損點時賣出
+    for (const [tokenId, position] of positions) {
+      if (position.size > 0) {
+        const loss = position.avgBuyPrice - position.currentPrice;
+        if (loss >= config.STOP_LOSS) {
+          console.log(`[策略] 觸發止損: ${position.outcome} loss=${loss.toFixed(2)}¢ >= stopLoss=${config.STOP_LOSS}¢`);
+          signals.push({
+            action: 'SELL',
+            tokenId,
+            outcome: position.outcome,
+            price: position.currentPrice,
+            size: position.size,
+            reason: `止損賣出 @ ${position.currentPrice.toFixed(1)}¢ (loss: -${loss.toFixed(2)}¢)`,
+          });
+        }
+      }
+    }
+    
+    if (signals.length > 0) {
+      return signals;
+    }
+
+    // 情況 2b: 獲利賣出 - 當價格達到目標時主動賣出
     for (const [tokenId, position] of positions) {
       if (position.size > 0) {
         const profit = position.currentPrice - position.avgBuyPrice;
