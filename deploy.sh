@@ -22,7 +22,8 @@ echo -e "${GREEN}  BTC 15M Trading Bot - VPS Deployment  ${NC}"
 echo -e "${GREEN}========================================${NC}"
 
 # Configuration
-APP_NAME="btc-mm-bot"
+APP_NAME="btc-mm-bot-3002"
+APP_PORT=3002
 APP_DIR="$(dirname "$(readlink -f "$0")")"
 NODE_VERSION="20"
 PM2_INSTANCES=1
@@ -59,7 +60,11 @@ echo "npm version: $(npm -v)"
 # =============================================================================
 echo -e "\n${YELLOW}[3/7] Installing PM2...${NC}"
 
-npm install -g pm2
+if ! command -v pm2 &> /dev/null; then
+    npm install -g pm2
+else
+    echo "pm2 already installed"
+fi
 
 # =============================================================================
 # Step 4: Setup application directory
@@ -96,8 +101,8 @@ echo -e "\n${YELLOW}[7/7] Starting application with PM2...${NC}"
 # Stop existing instance if running
 pm2 delete "$APP_NAME" 2>/dev/null || true
 
-# Start the application
-pm2 start npm --name "$APP_NAME" -- start
+# Start the application on the specified port
+PORT=$APP_PORT pm2 start npm --name "$APP_NAME" -- start
 
 # Save PM2 configuration
 pm2 save

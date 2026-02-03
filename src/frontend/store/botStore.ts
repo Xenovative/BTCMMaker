@@ -90,7 +90,8 @@ export const useBotStore = create<BotStore>((set, get) => ({
   ws: null,
 
   connect: () => {
-    const ws = new WebSocket(`ws://${window.location.hostname}:3001/ws`);
+    const port = window.location.port || '3002';
+    const ws = new WebSocket(`ws://${window.location.hostname}:${port || '3002'}/ws`);
     
     ws.onopen = () => {
       console.log('[WS] Connected');

@@ -383,7 +383,7 @@ app.get('*', (req, res) => {
 });
 
 // Start server
-const PORT = 3001;
+const PORT = Number(process.env.PORT) || 3002;
 server.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
